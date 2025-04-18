@@ -1,0 +1,53 @@
+version: '3.8'
+services:
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - app-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"   
+      - "15672:15672"  
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - app-network
+
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "3000:3000"
+    depends_on:
+      - authenticate-service
+      - comment-service
+      - post-service
+      - user-service
+    networks:
+      - app-network
+
+  product-service:
+    build: ./product-service
+    ports:
+      - "3006:3006"
+    environment:
+      MONGO_URI: mongodb://admin:secret@mongodb:27017/userdb?authSource=admin
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+
+volumes:
+  mongo_data:
+
+networks:
+  app-network:
