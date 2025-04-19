@@ -1,0 +1,170 @@
+services:
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - PRODUCT_SERVICE_URL=http://product-service:8001
+      - ORDER_SERVICE_URL=http://order-service:8002
+      - CUSTOMER_SERVICE_URL=http://customer-service:8003
+      - PAYMENT_SERVICE_URL=http://payment-service:8004
+      - INVENTORY_SERVICE_URL=http://inventory-service:8005
+      - SHIPPING_SERVICE_URL=http://shipping-service:8006
+    depends_on:
+      - product-service
+      - order-service
+      - customer-service
+      - payment-service
+      - inventory-service
+      - shipping-service
+
+  product-service:
+    build: ./product-service
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGO_URI=mongodb://product-mongo:27017/product_db
+    depends_on:
+      - product-mongo
+
+  product-mongo:
+    image: mongo:latest
+    volumes:
+      - product_data:/data/db
+    ports:
+      - "27017:27017"
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "8002:8002"
+    environment:
+      - MONGO_URI=mongodb://order-mongo:27017/order_db
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    depends_on:
+      - order-mongo
+      - rabbitmq
+
+  order-mongo:
+    image: mongo:latest
+    volumes:
+      - order_data:/data/db
+    ports:
+      - "27018:27017"
+
+  customer-service:
+    build: ./customer-service
+    ports:
+      - "8003:8003"
+    environment:
+      - MONGO_URI=mongodb://customer-mongo:27017/customer_db
+    depends_on:
+      - customer-mongo
+
+  customer-mongo:
+    image: mongo:latest
+    volumes:
+      - customer_data:/data/db
+    ports:
+      - "27019:27017"
+
+  payment-service:
+    build: ./payment-service
+    ports:
+      - "8004:8004"
+    environment:
+      - MONGO_URI=mongodb://payment-mongo:27017/payment_db
+    depends_on:
+      - payment-mongo
+
+  payment-mongo:
+    image: mongo:latest
+    volumes:
+      - payment_data:/data/db
+    ports:
+      - "27020:27017"
+
+  inventory-service:
+    build: ./inventory-service
+    ports:
+      - "8005:8005"
+    environment:
+      - MONGO_URI=mongodb://inventory-mongo:27017/inventory_db
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    depends_on:
+      - inventory-mongo
+      - rabbitmq
+
+  inventory-mongo:
+    image: mongo:latest
+    volumes:
+      - inventory_data:/data/db
+    ports:
+      - "27021:27017"
+
+  shipping-service:
+    build: ./shipping-service
+    ports:
+      - "8006:8006"
+    environment:
+      - MONGO_URI=mongodb://shipping-mongo:27017/shipping_db
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    depends_on:
+      - shipping-mongo
+      - rabbitmq
+
+  shipping-mongo:
+    image: mongo:latest
+    volumes:
+      - shipping_data:/data/db
+    ports:
+      - "27022:27017"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.8.0
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    ports:
+      - "5044:5044"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    depends_on:
+      - elasticsearch
+    ports:
+      - "5601:5601"
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.8.0
+    volumes:
+      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - logstash
+
+volumes:
+  product_data:
+  order_data:
+  customer_data:
+  payment_data:
+  inventory_data:
+  shipping_data:
+  es_data:
