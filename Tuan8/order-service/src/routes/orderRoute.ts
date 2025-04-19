@@ -1,172 +1,68 @@
-import express from "express";
-import orderService from "../services/orderService";
-import { IOrder } from "../models/Order";
-import productClient from "../clients/productClient";
-
+import express, { Request, Response } from 'express';
+import amqp from 'amqplib';
+import Order from '../models/Order';
 
 const router = express.Router();
 
-router.post("/", (req: any, res: any) => {
-    const { customerId, products } = req.body;
+async function publishToQueue(queue: string, message: any) {
+    const connection = await amqp.connect(process.env.RABBITMQ_URL);
+    const channel = await connection.createChannel();
+    await channel.assertQueue(queue, { durable: true });
+    channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
+    await channel.close();
+    await connection.close();
+}
 
-    if (!customerId || !products) {
-        return res.status(400).json({
-            errorCode: 400,
-            errorMessage: "Missing required fields",
-            data: null,
-        });
-    }
-
+// Create an order
+router.post('/', async (req: Request, res: Response) => {
     try {
-        const newOrder = {
-            customerId,
-            products,
-        } as IOrder;
+        const order = new Order(req.body);
+        await order.save();
 
-        orderService.createOrder(newOrder).then((order: IOrder) => {
-            return res.status(200).json({
-                errorCode: 201,
-                errorMessage: "Order created successfully",
-                data: {
-                    ...order.toObject(),
-                    _id: order._id,
-                },
-            });
-        }).catch((error: any) => {
-            return res.status(200).json({
-                errorCode: 500,
-                errorMessage: "Internal server error",
-                data: null,
-            });
-        });
-    } catch (error) {
-        return res.status(200).json({
-            errorCode: 500,
-            errorMessage: "Internal server error",
-            data: null,
-        });
+        // Send message to RabbitMQ to update stock in Product Service
+        const message = {
+            productId: order.productId,
+            quantity: order.quantity,
+        };
+        await publishToQueue('update_stock', message);
+
+        res.status(201).json(order);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
     }
-})
+});
 
-router.get("/", (req: any, res: any) => {
-    orderService.getAllOrders().then((orders: IOrder[]) => {
-        return res.status(200).json({
-            errorCode: 200,
-            errorMessage: "Get all orders successfully",
-            data: orders,
-        });
-    }).catch((error: any) => {
-        return res.status(200).json({
-            errorCode: 500,
-            errorMessage: "Internal server error",
-            data: null,
-        });
-    });
-})
-
-router.get("/:id", (req: any, res: any) => {
-    const { id } = req.params;
-
-    orderService.getOrderById(id).then(async (order: IOrder | null) => {
-        if (!order) {
-            return res.status(200).json({
-                errorCode: 404,
-                errorMessage: "Order not found",
-                data: null,
-            });
-        }
-
-        order.products = await Promise.all(order.products.map( async (product: any) => {
-            const metadata = await productClient.getProductById(product.productId);
-            console.log(metadata);
-            if (metadata) {
-                product = {...metadata, ...product};
-            }
-            return product;
-        }) as any);
-        return res.status(200).json({
-            errorCode: 200,
-            errorMessage: "Get order successfully",
-            data: order,
-        });
-    }).catch((error: any) => {
-        return res.status(200).json({
-            errorCode: 500,
-            errorMessage: "Internal server error",
-            data: null,
-        });
-    });
-})
-
-router.put("/:id", (req: any, res: any) => {
-    const { id } = req.params;
-    const { customerId, products } = req.body;
-
-    if (!customerId || !products) {
-        return res.status(200).json({
-            errorCode: 400,
-            errorMessage: "Missing required fields",
-            data: null,
-        });
-    }
-
+// Get an order by ID
+router.get('/:id', async (req: Request, res: Response) => {
     try {
-        const updatedOrder = {
-            customerId,
-            products,
-        } as IOrder;
-
-        orderService.updateOrder(id, updatedOrder).then((order: IOrder | null) => {
-            if (!order) {
-                return res.status(200).json({
-                    errorCode: 404,
-                    errorMessage: "Order not found",
-                    data: null,
-                });
-            }
-            return res.status(200).json({
-                errorCode: 200,
-                errorMessage: "Order updated successfully",
-                data: order,
-            });
-        }).catch((error: any) => {
-            return res.status(200).json({
-                errorCode: 500,
-                errorMessage: "Internal server error",
-                data: null,
-            });
-        });
-    } catch (error) {
-        return res.status(200).json({
-            errorCode: 500,
-            errorMessage: "Internal server error",
-            data: null,
-        });
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        res.json(order);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
     }
-})
+});
 
-router.delete("/:id", (req: any, res: any) => {
-    const { id } = req.params;
+// Update an order
+router.put('/:id', async (req: Request, res: Response) => {
+    try {
+        const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        res.json(order);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
 
-    orderService.deleteOrder(id).then((order: IOrder | null) => {
-        if (!order) {
-            return res.status(200).json({
-                errorCode: 404,
-                errorMessage: "Order not found",
-                data: null,
-            });
-        }
-        return res.status(200).json({
-            errorCode: 200,
-            errorMessage: "Order deleted successfully",
-            data: order,
-        });
-    }).catch((error: any) => {
-        return res.status(200).json({
-            errorCode: 500,
-            errorMessage: "Internal server error",
-            data: null,
-        });
-    });
-})
+// Delete an order
+router.delete('/:id', async (req: Request, res: Response) => {
+    try {
+        const order = await Order.findByIdAndDelete(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        res.json({ message: 'Order deleted' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

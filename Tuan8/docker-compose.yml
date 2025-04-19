@@ -1,12 +1,8 @@
-version: '3.8'
 services:
   mongodb:
     image: mongo:6
     ports:
       - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
     volumes:
       - mongo_data:/data/db
     networks:
@@ -27,11 +23,6 @@ services:
     build: ./api-gateway
     ports:
       - "3000:3000"
-    depends_on:
-      - authenticate-service
-      - comment-service
-      - post-service
-      - user-service
     networks:
       - app-network
 
@@ -40,7 +31,18 @@ services:
     ports:
       - "3006:3006"
     environment:
-      MONGO_URI: mongodb://admin:secret@mongodb:27017/userdb?authSource=admin
+      MONGO_URI: mongodb://mongodb:27017/userdb
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "3005:3005"
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/orderdb
     depends_on:
       - mongodb
     networks:

@@ -7,14 +7,12 @@ const PORT = 3000;
 
 app.use(cors());
 
-// Nếu muốn giới hạn origin:
 app.use(cors({
 	origin: '*',
 	methods: ['GET', 'POST', 'PUT', 'DELETE'],
 	credentials: true
 }));
 
-// Proxy config
 app.use(
 	"/api/user",
 	createProxyMiddleware({
@@ -23,7 +21,6 @@ app.use(
 	})
 );
 
-// Health check
 app.get("/", (_req, res) => {
 	res.send("API Gateway is running...");
 });

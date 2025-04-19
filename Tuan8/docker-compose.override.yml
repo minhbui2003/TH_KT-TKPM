@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api-gateway:
     build:
@@ -20,3 +18,13 @@ services:
       - /app/node_modules   
     ports:
       - "3006:3006"
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./order-service/src:/app/src
+      - /app/node_modules   
+    ports:
+      - "3005:3005"
